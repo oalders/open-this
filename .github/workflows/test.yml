@@ -2,7 +2,14 @@
 name: test
 
 on:
-  - push
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches:
+      - "*"
+  schedule:
+    - cron: "15 4 * * 0" # Every Sunday morning
 
 jobs:
   build:
@@ -40,6 +47,7 @@ jobs:
           CODECOV_TOKEN: ${{secrets.CODECOV_TOKEN}}
           HARNESS_PERL_SWITCHES: "-MDevel::Cover=+ignore,^local/|^t/|^xt"
           RELEASE_TESTING: 1
+          TEST_TIDYALL_VERBOSE: 1
         run: >
           cpm install -g
           --show-build-log-on-failure
@@ -47,6 +55,19 @@ jobs:
           cd dzil_build_dir
           && prove -lvr --jobs 2 t xt
           && cover -report codecov
+      - name: Maybe run tidyall # pip3 is for create-pull-request
+        if: failure() && github.event_name == 'pull_request'
+        run: >
+          git config user.email "olaf@wundersolutions.com" &&
+          git config user.name "Olaf Alders" &&
+          git reset --hard &&
+          tidyall -a && git add lib script t &&
+          git commit -m "Tidy" &&
+          apt-get update &&
+          apt-get install -y python3-pip
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v2
+        if: failure() && github.event_name == 'pull_request'
   test:
     runs-on: ubuntu-latest
     name: Test distribution
